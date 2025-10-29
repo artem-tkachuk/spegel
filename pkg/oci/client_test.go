@@ -1,12 +1,14 @@
 package oci
 
 import (
-	"net/http"
-	"net/http/httptest"
-	"net/url"
-	"os"
-	"path/filepath"
-	"testing"
+    "bytes"
+    "io"
+    "net/http"
+    "net/http/httptest"
+    "net/url"
+    "os"
+    "path/filepath"
+    "testing"
 
 	"cuelabs.dev/go/oci/ociregistry/ocimem"
 	"cuelabs.dev/go/oci/ociregistry/ociserver"
@@ -15,6 +17,18 @@ import (
 	"github.com/spegel-org/spegel/pkg/httpx"
 	"github.com/stretchr/testify/require"
 )
+
+// roundTripperFunc allows using a function as an http.RoundTripper in tests.
+type roundTripperFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }
+
+// trackingBody tracks whether Close was called.
+type trackingBody struct{ closed *bool }
+
+func (tb trackingBody) Read(p []byte) (int, error) { return 0, io.EOF }
+
+func (tb trackingBody) Close() error { *tb.closed = true; return nil }
 
 func TestClient(t *testing.T) {
 	t.Parallel()
@@ -186,4 +200,59 @@ func TestDescriptorHeader(t *testing.T) {
 			require.EqualError(t, err, tt.expected)
 		})
 	}
+}
+
+// Test that on 401 the initial response body is properly drained/closed before retrying auth.
+func TestFetch_ClosesBodyOnUnauthorized(t *testing.T) {
+    t.Parallel()
+
+    // Track closes on the 401 body.
+    closed := false
+    tb := trackingBody{closed: &closed}
+
+    // First request returns 401 with WWW-Authenticate; second is token; third is success.
+    var stage int
+    rt := roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+        stage++
+        switch stage {
+        case 1:
+            return &http.Response{
+                StatusCode: http.StatusUnauthorized,
+                Header: http.Header{
+                    httpx.HeaderWWWAuthenticate: {"Bearer realm=\"https://auth.example/token\""},
+                },
+                Body: tb,
+                Request: req,
+            }, nil
+        case 2:
+            // token fetch
+            if req.URL.String() == "https://auth.example/token" {
+                return &http.Response{
+                    StatusCode: http.StatusOK,
+                    Body: io.NopCloser(bytes.NewBufferString("{\"token\":\"abc\"}")),
+                    Request: req,
+                }, nil
+            }
+        }
+        // final data fetch
+        return &http.Response{
+            StatusCode: http.StatusOK,
+            Header: http.Header{
+                httpx.HeaderContentType:   {httpx.ContentTypeBinary},
+                httpx.HeaderContentLength: {"1"},
+                HeaderDockerDigest:        {"sha256:9fccb471b0f2482af80f8bd7b198dfe3afedb16e683fdd30a17423a32be54d10"},
+            },
+            Body: io.NopCloser(bytes.NewBuffer([]byte{0})),
+            Request: req,
+        }, nil
+    })
+    httpClient := &http.Client{Transport: rt}
+    client := NewClient(httpClient)
+
+    img, err := ParseImage("example.com/org/repo:tag", AllowTagOnly())
+    require.NoError(t, err)
+    dist := img.DistributionPath()
+    _, _, err = client.Fetch(t.Context(), http.MethodGet, dist)
+    require.NoError(t, err)
+    require.True(t, closed, "401 response body should be closed before retry")
 }

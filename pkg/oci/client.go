@@ -308,6 +308,8 @@ func (c *Client) Fetch(ctx context.Context, method string, dist DistributionPath
 			return nil, ocispec.Descriptor{}, err
 		}
 		if resp.StatusCode == http.StatusUnauthorized {
+			// Ensure body is drained and closed before retrying auth flow to avoid leaks.
+			_ = httpx.DrainAndClose(resp.Body)
 			c.tc.Delete(tcKey)
 			wwwAuth := resp.Header.Get(httpx.HeaderWWWAuthenticate)
 			token, err = getBearerToken(ctx, wwwAuth, c.httpClient)

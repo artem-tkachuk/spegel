@@ -27,7 +27,7 @@ func Run(ctx context.Context, addr, configPath string) error {
 	g, gCtx := errgroup.WithContext(ctx)
 
 	mux := http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
-		if req.Method != http.MethodGet && req.URL.Path != "/readyz" {
+		if req.Method != http.MethodGet || req.URL.Path != "/readyz" {
 			log.Error(errors.New("unknown request"), "unsupported probe request", "path", req.URL.Path, "method", req.Method)
 			rw.WriteHeader(http.StatusNotFound)
 			return

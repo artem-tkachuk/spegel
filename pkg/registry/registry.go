@@ -104,6 +104,7 @@ func NewRegistry(ociStore oci.Store, router routing.Router, opts ...RegistryOpti
 		transport.MaxIdleConns = 100
 		transport.MaxConnsPerHost = 100
 		transport.MaxIdleConnsPerHost = 100
+		transport.ResponseHeaderTimeout = 10 * time.Second
 		httpClient.Transport = transport
 	}
 	ociClient := oci.NewClient(httpClient)
@@ -163,7 +164,7 @@ func (r *Registry) registryHandler(rw httpx.ResponseWriter, req *http.Request) {
 	rw.SetAttrs(HandlerAttrKey, "registry")
 
 	// Check basic authentication
-	if r.username != "" || r.password != "" {
+	if r.username != "" && r.password != "" {
 		username, password, _ := req.BasicAuth()
 		if r.username != username || r.password != password {
 			respErr := oci.NewDistributionError(oci.ErrCodeUnauthorized, "invalid credentials", nil)

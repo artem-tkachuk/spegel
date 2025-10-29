@@ -58,3 +58,35 @@ func TestCleanupSucceed(t *testing.T) {
 	err = g.Wait()
 	require.NoError(t, err)
 }
+
+func TestProbeEndpoints(t *testing.T) {
+    t.Parallel()
+
+    handler := http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+        if req.Method != http.MethodGet || req.URL.Path != "/readyz" {
+            rw.WriteHeader(http.StatusNotFound)
+            return
+        }
+        rw.WriteHeader(http.StatusOK)
+    })
+
+    ts := httptest.NewServer(handler)
+    t.Cleanup(func() { ts.Close() })
+
+    // GET /readyz -> 200
+    resp, err := ts.Client().Get(ts.URL + "/readyz")
+    require.NoError(t, err)
+    require.Equal(t, http.StatusOK, resp.StatusCode)
+
+    // GET / -> 404
+    resp, err = ts.Client().Get(ts.URL + "/")
+    require.NoError(t, err)
+    require.Equal(t, http.StatusNotFound, resp.StatusCode)
+
+    // POST /readyz -> 404
+    req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, ts.URL+"/readyz", nil)
+    require.NoError(t, err)
+    resp, err = ts.Client().Do(req)
+    require.NoError(t, err)
+    require.Equal(t, http.StatusNotFound, resp.StatusCode)
+}
