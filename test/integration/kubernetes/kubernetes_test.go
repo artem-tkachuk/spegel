@@ -428,6 +428,9 @@ func installSpegel(t *testing.T, actionCfg *action.Configuration, k8sClient kube
 	vals := map[string]any{
 		"spegel": map[string]any{
 			"logLevel": "DEBUG",
+			"otel": map[string]any{
+				"endpoint": "http://localhost:4318",
+			},
 		},
 		"nodeSelector": map[string]any{
 			nodeTaintKey: "true",
