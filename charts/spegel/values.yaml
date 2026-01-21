@@ -190,8 +190,6 @@ spegel:
   debugWebEnabled: true
   # -- OTEL tracing configuration.
   otel:
-    # -- Enable OTEL tracing.
-    enabled: false
     # -- OTEL exporter endpoint (e.g., http://otel-collector:4318).
     endpoint: ""
     # -- Use insecure connection for OTEL exporter.

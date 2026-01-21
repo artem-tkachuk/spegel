@@ -17,7 +17,6 @@ build-image: build
 
 test-unit:
 	@go test ./... -race
-	@go test -tags otel ./... -race
 
 test-integration-containerd:
 	@cd ./test/integration/containerd && INTEGRATION_TEST_STRATEGY="fast" go test -v -timeout 200s -count 1 ./...

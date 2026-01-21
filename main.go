@@ -67,7 +67,6 @@ type RegistryCmd struct {
 	MirrorResolveRetries         int              `arg:"--mirror-resolve-retries,env:MIRROR_RESOLVE_RETRIES" default:"3" help:"Max amount of mirrors to attempt."`
 	DebugWebEnabled              bool             `arg:"--debug-web-enabled,env:DEBUG_WEB_ENABLED" default:"true" help:"When true enables debug web page."`
 	ResolveLatestTag             bool             `arg:"--resolve-latest-tag,env:RESOLVE_LATEST_TAG" default:"true" help:"When true latest tags will be resolved to digests."`
-	OtelEnabled                  bool             `arg:"--otel-enabled,env:OTEL_ENABLED" help:"Enable OTEL tracing."`
 	OtelInsecure                 bool             `arg:"--otel-insecure,env:OTEL_INSECURE" help:"Use insecure connection for OTEL exporter."`
 }
 
@@ -106,8 +105,7 @@ func runMain() int {
 	log := logr.FromSlogHandler(handler)
 	ctx := logr.NewContext(context.Background(), log)
 
-	// Only set up OTEL if explicitly enabled via registry command flags
-	if args.Registry != nil && args.Registry.OtelEnabled {
+	if args.Registry != nil {
 		cfg := otelx.Config{
 			ServiceName: args.Registry.OtelServiceName,
 			Endpoint:    args.Registry.OtelEndpoint,
