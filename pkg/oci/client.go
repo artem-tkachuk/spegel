@@ -22,7 +22,6 @@ import (
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 
 	"github.com/spegel-org/spegel/internal/option"
-	"github.com/spegel-org/spegel/internal/otelx"
 	"github.com/spegel-org/spegel/pkg/httpx"
 )
 
@@ -66,7 +65,7 @@ func NewClient(opts ...ClientOption) (*Client, error) {
 	transport.MaxIdleConns = 100
 	transport.MaxConnsPerHost = 100
 	transport.MaxIdleConnsPerHost = 100
-	httpClient.Transport = otelx.WrapTransport("oci", transport)
+	httpClient.Transport = httpx.WrapTransport("oci", transport)
 
 	ociClient := &Client{
 		httpClient: httpClient,

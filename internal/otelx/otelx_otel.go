@@ -3,13 +3,12 @@ package otelx
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"os"
+	"reflect"
 	"strconv"
 	"time"
 
 	"github.com/go-logr/logr"
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/propagation"
@@ -17,6 +16,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.24.0"
 	oteltrace "go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/otel/trace/noop"
 )
 
 // Shutdown is a function type for shutting down the OTEL SDK.
@@ -33,6 +33,11 @@ type Config struct {
 // Setup initializes the OpenTelemetry SDK.
 func Setup(ctx context.Context, cfg Config) (Shutdown, error) {
 	log := logr.FromContextOrDiscard(ctx)
+
+	if _, ok := otel.GetTracerProvider().(noop.TracerProvider); !ok {
+		log.Info("skipping OTEL setup; tracer provider already configured")
+		return nil, nil
+	}
 
 	// Use cfg if provided, otherwise fall back to environment
 	if cfg.Endpoint == "" {
@@ -76,10 +81,15 @@ func Setup(ctx context.Context, cfg Config) (Shutdown, error) {
 
 	otel.SetTracerProvider(tp)
 
-	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
+	defaultPropagator := propagation.NewCompositeTextMapPropagator(
 		propagation.TraceContext{},
 		propagation.Baggage{},
-	))
+	)
+	if reflect.DeepEqual(otel.GetTextMapPropagator(), defaultPropagator) {
+		otel.SetTextMapPropagator(defaultPropagator)
+	} else {
+		log.Info("keeping existing OTEL propagator")
+	}
 
 	shutdownFn := func(ctx context.Context) error {
 		if tp != nil {
@@ -96,16 +106,6 @@ func Setup(ctx context.Context, cfg Config) (Shutdown, error) {
 // SetupWithDefaults is a convenience function that accepts a service name.
 func SetupWithDefaults(ctx context.Context, serviceName string) (Shutdown, error) {
 	return Setup(ctx, Config{ServiceName: serviceName})
-}
-
-// WrapHandler wraps an HTTP handler with OpenTelemetry instrumentation.
-func WrapHandler(name string, h http.Handler) http.Handler {
-	return otelhttp.NewHandler(h, name)
-}
-
-// WrapTransport wraps an HTTP transport with OpenTelemetry instrumentation.
-func WrapTransport(name string, rt http.RoundTripper) http.RoundTripper {
-	return otelhttp.NewTransport(rt)
 }
 
 // WithEnrichedLogger adds trace correlation fields and returns a derived logger.

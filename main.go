@@ -24,6 +24,7 @@ import (
 	"github.com/spegel-org/spegel/internal/otelx"
 
 	"github.com/spegel-org/spegel/internal/cleanup"
+	"github.com/spegel-org/spegel/pkg/httpx"
 	"github.com/spegel-org/spegel/pkg/metrics"
 	"github.com/spegel-org/spegel/pkg/oci"
 	"github.com/spegel-org/spegel/pkg/registry"
@@ -241,7 +242,7 @@ func registryCommand(ctx context.Context, args *RegistryCmd) error {
 	}
 	regSrv := &http.Server{
 		Addr:    args.RegistryAddr,
-		Handler: otelx.WrapHandler("registry", reg.Handler(log)),
+		Handler: httpx.WrapHandler("registry", reg.Handler(log)),
 	}
 	g.Go(func() error {
 		if err := regSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -287,7 +288,7 @@ func registryCommand(ctx context.Context, args *RegistryCmd) error {
 	}
 	metricsSrv := &http.Server{
 		Addr:    args.MetricsAddr,
-		Handler: otelx.WrapHandler("metrics", mux),
+		Handler: httpx.WrapHandler("metrics", mux),
 	}
 	g.Go(func() error {
 		if err := metricsSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
