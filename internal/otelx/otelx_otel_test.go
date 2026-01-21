@@ -10,16 +10,19 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/trace"
-	"go.opentelemetry.io/otel/trace/noop"
 )
 
 // ensureTestTracerProvider sets a global tracer provider that always samples.
 func ensureTestTracerProvider(t *testing.T) {
 	t.Helper()
+	prevProvider := otel.GetTracerProvider()
+	prevPropagator := otel.GetTextMapPropagator()
 	tp := trace.NewTracerProvider(trace.WithSampler(trace.AlwaysSample()))
 	otel.SetTracerProvider(tp)
 	otel.SetTextMapPropagator(propagation.TraceContext{})
 	t.Cleanup(func() {
+		otel.SetTracerProvider(prevProvider)
+		otel.SetTextMapPropagator(prevPropagator)
 		if err := tp.Shutdown(context.Background()); err != nil {
 			t.Errorf("failed to shutdown tracer provider: %v", err)
 		}
@@ -27,7 +30,6 @@ func ensureTestTracerProvider(t *testing.T) {
 }
 
 func TestStartSpan_Otel(t *testing.T) {
-	t.Parallel()
 	ensureTestTracerProvider(t)
 	ctx := context.Background()
 	newCtx, end := StartSpan(ctx, "test-span")
@@ -37,7 +39,6 @@ func TestStartSpan_Otel(t *testing.T) {
 }
 
 func TestWithEnrichedLogger_AddsTraceFields(t *testing.T) {
-	t.Parallel()
 	ensureTestTracerProvider(t)
 	ctx, end := StartSpan(context.Background(), "log-span")
 	defer end()
@@ -53,12 +54,14 @@ func TestWithEnrichedLogger_AddsTraceFields(t *testing.T) {
 }
 
 func TestSetup_UsesExistingTracerProvider(t *testing.T) {
-	t.Parallel()
 	tp := trace.NewTracerProvider()
+	prevProvider := otel.GetTracerProvider()
+	prevPropagator := otel.GetTextMapPropagator()
 	otel.SetTracerProvider(tp)
 	otel.SetTextMapPropagator(propagation.TraceContext{})
 	t.Cleanup(func() {
-		otel.SetTracerProvider(noop.NewTracerProvider())
+		otel.SetTracerProvider(prevProvider)
+		otel.SetTextMapPropagator(prevPropagator)
 	})
 
 	shutdown, err := Setup(context.Background(), Config{})

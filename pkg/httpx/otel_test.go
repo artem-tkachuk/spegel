@@ -14,7 +14,6 @@ import (
 )
 
 func TestWrapHandler_SetsActiveSpan(t *testing.T) {
-	t.Parallel()
 	ensureTestTracerProvider(t)
 	var parentTraceID trace.TraceID
 	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -42,7 +41,6 @@ func TestWrapHandler_SetsActiveSpan(t *testing.T) {
 }
 
 func TestWrapTransport_InjectsTraceparent(t *testing.T) {
-	t.Parallel()
 	ensureTestTracerProvider(t)
 
 	gotHeader := make(chan string, 1)
