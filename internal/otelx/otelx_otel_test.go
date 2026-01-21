@@ -6,6 +6,7 @@ import (
 
 	"github.com/go-logr/logr/funcr"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/trace"
@@ -18,7 +19,11 @@ func ensureTestTracerProvider(t *testing.T) {
 	tp := trace.NewTracerProvider(trace.WithSampler(trace.AlwaysSample()))
 	otel.SetTracerProvider(tp)
 	otel.SetTextMapPropagator(propagation.TraceContext{})
-	t.Cleanup(func() { _ = tp.Shutdown(context.Background()) })
+	t.Cleanup(func() {
+		if err := tp.Shutdown(context.Background()); err != nil {
+			t.Errorf("failed to shutdown tracer provider: %v", err)
+		}
+	})
 }
 
 func TestStartSpan_Otel(t *testing.T) {
@@ -57,8 +62,7 @@ func TestSetup_UsesExistingTracerProvider(t *testing.T) {
 	})
 
 	shutdown, err := Setup(context.Background(), Config{})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Nil(t, shutdown)
 	assert.Same(t, tp, otel.GetTracerProvider())
 }
-

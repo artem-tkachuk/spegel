@@ -15,7 +15,6 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 	"go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.24.0"
-	oteltrace "go.opentelemetry.io/otel/trace"
 	"go.opentelemetry.io/otel/trace/noop"
 )
 
@@ -106,31 +105,6 @@ func Setup(ctx context.Context, cfg Config) (Shutdown, error) {
 // SetupWithDefaults is a convenience function that accepts a service name.
 func SetupWithDefaults(ctx context.Context, serviceName string) (Shutdown, error) {
 	return Setup(ctx, Config{ServiceName: serviceName})
-}
-
-// WithEnrichedLogger adds trace correlation fields and returns a derived logger.
-func WithEnrichedLogger(ctx context.Context, log logr.Logger) logr.Logger {
-	span := oteltrace.SpanFromContext(ctx)
-	if !span.IsRecording() {
-		return log
-	}
-
-	spanCtx := span.SpanContext()
-	if !spanCtx.IsValid() {
-		return log
-	}
-
-	traceID := spanCtx.TraceID().String()
-	spanID := spanCtx.SpanID().String()
-
-	return log.WithValues("trace_id", traceID, "span_id", spanID)
-}
-
-// StartSpan creates a new trace span.
-func StartSpan(ctx context.Context, name string, opts ...oteltrace.SpanStartOption) (context.Context, func()) {
-	tracer := otel.Tracer("github.com/spegel-org/spegel")
-	ctx, span := tracer.Start(ctx, name, opts...)
-	return ctx, func() { span.End() }
 }
 
 // getEnv returns an environment variable value or a default.
