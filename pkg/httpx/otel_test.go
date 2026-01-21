@@ -13,6 +13,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
+//nolint:paralleltest // Mutates global OTEL provider/propagator.
 func TestWrapHandler_SetsActiveSpan(t *testing.T) {
 	ensureTestTracerProvider(t)
 	var parentTraceID trace.TraceID
@@ -40,6 +41,7 @@ func TestWrapHandler_SetsActiveSpan(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rr.Code)
 }
 
+//nolint:paralleltest // Mutates global OTEL provider/propagator.
 func TestWrapTransport_InjectsTraceparent(t *testing.T) {
 	ensureTestTracerProvider(t)
 

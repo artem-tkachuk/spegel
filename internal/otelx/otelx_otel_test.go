@@ -29,6 +29,7 @@ func ensureTestTracerProvider(t *testing.T) {
 	})
 }
 
+//nolint:paralleltest // Mutates global OTEL provider/propagator.
 func TestStartSpan_Otel(t *testing.T) {
 	ensureTestTracerProvider(t)
 	ctx := context.Background()
@@ -38,6 +39,7 @@ func TestStartSpan_Otel(t *testing.T) {
 	end()
 }
 
+//nolint:paralleltest // Mutates global OTEL provider/propagator.
 func TestWithEnrichedLogger_AddsTraceFields(t *testing.T) {
 	ensureTestTracerProvider(t)
 	ctx, end := StartSpan(context.Background(), "log-span")
@@ -53,6 +55,7 @@ func TestWithEnrichedLogger_AddsTraceFields(t *testing.T) {
 	assert.Contains(t, captured, "\"span_id\"=")
 }
 
+//nolint:paralleltest // Mutates global OTEL provider/propagator.
 func TestSetup_UsesExistingTracerProvider(t *testing.T) {
 	tp := trace.NewTracerProvider()
 	prevProvider := otel.GetTracerProvider()
