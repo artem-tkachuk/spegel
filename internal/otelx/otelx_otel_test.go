@@ -10,6 +10,7 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/trace/noop"
 )
 
 // ensureTestTracerProvider sets a global tracer provider that always samples.
@@ -71,4 +72,65 @@ func TestSetup_UsesExistingTracerProvider(t *testing.T) {
 	require.NoError(t, err)
 	assert.Nil(t, shutdown)
 	assert.Same(t, tp, otel.GetTracerProvider())
+}
+
+//nolint:paralleltest // Mutates global OTEL provider/propagator.
+func TestSetup_RespectsExistingPropagator(t *testing.T) {
+	prevProvider := otel.GetTracerProvider()
+	prevPropagator := otel.GetTextMapPropagator()
+	customProp := propagation.NewCompositeTextMapPropagator(propagation.Baggage{})
+	otel.SetTracerProvider(noop.NewTracerProvider())
+	otel.SetTextMapPropagator(customProp)
+	t.Cleanup(func() {
+		otel.SetTracerProvider(prevProvider)
+		otel.SetTextMapPropagator(prevPropagator)
+	})
+
+	shutdown, err := Setup(context.Background(), Config{
+		Endpoint: "http://127.0.0.1:4318",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, shutdown)
+	assert.Equal(t, customProp, otel.GetTextMapPropagator())
+}
+
+//nolint:paralleltest // Mutates global OTEL provider/propagator.
+func TestSetup_InsecureEndpoint(t *testing.T) {
+	prevProvider := otel.GetTracerProvider()
+	prevPropagator := otel.GetTextMapPropagator()
+	otel.SetTracerProvider(noop.NewTracerProvider())
+	t.Cleanup(func() {
+		otel.SetTracerProvider(prevProvider)
+		otel.SetTextMapPropagator(prevPropagator)
+	})
+
+	shutdown, err := Setup(context.Background(), Config{
+		Endpoint: "127.0.0.1:4318",
+		Insecure: true,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, shutdown)
+}
+
+func TestNewSampler(t *testing.T) {
+	tests := []struct {
+		name     string
+		sampler  string
+		expected trace.SamplingDecision
+	}{
+		{name: "always_on", sampler: "always_on", expected: trace.RecordAndSample},
+		{name: "always_off", sampler: "always_off", expected: trace.Drop},
+		{name: "ratio", sampler: "0.0", expected: trace.Drop},
+		{name: "unknown", sampler: "bogus", expected: trace.Drop},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			res := newSampler(tt.sampler).ShouldSample(trace.SamplingParameters{
+				ParentContext: context.Background(),
+				Name:          "test",
+			})
+			assert.Equal(t, tt.expected, res.Decision)
+		})
+	}
 }

@@ -82,3 +82,20 @@ func TestWrapTransport_InjectsTraceparent(t *testing.T) {
 	assert.Equal(t, http.StatusOK, res.StatusCode)
 	assert.NotEmpty(t, <-gotHeader)
 }
+
+//nolint:paralleltest // Mutates global OTEL provider/propagator.
+func TestWrapTransport_Defaults(t *testing.T) {
+	ensureTestTracerProvider(t)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(srv.Close)
+
+	client := &http.Client{Transport: WrapTransport("", nil)}
+	req, reqErr := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL, nil)
+	require.NoError(t, reqErr)
+	res, err := client.Do(req)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, res.StatusCode)
+}
