@@ -112,6 +112,7 @@ func TestSetup_InsecureEndpoint(t *testing.T) {
 	require.NotNil(t, shutdown)
 }
 
+//nolint:paralleltest // Mutates global OTEL provider/propagator.
 func TestNewSampler(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -125,6 +126,7 @@ func TestNewSampler(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			res := newSampler(tt.sampler).ShouldSample(trace.SamplingParameters{
 				ParentContext: context.Background(),
