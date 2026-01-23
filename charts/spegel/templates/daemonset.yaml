@@ -116,7 +116,9 @@ spec:
           - --containerd-content-path={{ . }}
           {{- end }}
           - --debug-web-enabled={{ .Values.spegel.debugWebEnabled }}
+          {{- if .Values.spegel.otel.endpoint }}
           - --otel-endpoint={{ .Values.spegel.otel.endpoint }}
+          {{- end }}
           {{- if .Values.spegel.otel.insecure }}
           - --otel-insecure
           {{- end }}
