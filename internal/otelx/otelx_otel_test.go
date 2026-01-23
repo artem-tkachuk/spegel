@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
-	"go.opentelemetry.io/otel/sdk/trace"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace/noop"
 )
 
@@ -18,7 +18,7 @@ func ensureTestTracerProvider(t *testing.T) {
 	t.Helper()
 	prevProvider := otel.GetTracerProvider()
 	prevPropagator := otel.GetTextMapPropagator()
-	tp := trace.NewTracerProvider(trace.WithSampler(trace.AlwaysSample()))
+	tp := sdktrace.NewTracerProvider(sdktrace.WithSampler(sdktrace.AlwaysSample()))
 	otel.SetTracerProvider(tp)
 	otel.SetTextMapPropagator(propagation.TraceContext{})
 	t.Cleanup(func() {
@@ -58,7 +58,7 @@ func TestWithEnrichedLogger_AddsTraceFields(t *testing.T) {
 
 //nolint:paralleltest // Mutates global OTEL provider/propagator.
 func TestSetup_UsesExistingTracerProvider(t *testing.T) {
-	tp := trace.NewTracerProvider()
+	tp := sdktrace.NewTracerProvider()
 	prevProvider := otel.GetTracerProvider()
 	prevPropagator := otel.GetTextMapPropagator()
 	otel.SetTracerProvider(tp)
@@ -98,7 +98,7 @@ func TestSetup_RespectsExistingPropagator(t *testing.T) {
 func TestSetup_OverridesExistingProviderWhenConfigured(t *testing.T) {
 	prevProvider := otel.GetTracerProvider()
 	prevPropagator := otel.GetTextMapPropagator()
-	existing := trace.NewTracerProvider()
+	existing := sdktrace.NewTracerProvider()
 	otel.SetTracerProvider(existing)
 	otel.SetTextMapPropagator(propagation.TraceContext{})
 	t.Cleanup(func() {
@@ -116,7 +116,6 @@ func TestSetup_OverridesExistingProviderWhenConfigured(t *testing.T) {
 	assert.NotSame(t, existing, otel.GetTracerProvider())
 }
 
-//nolint:paralleltest // Mutates global OTEL provider/propagator/env.
 func TestSetup_UsesEnvSampler(t *testing.T) {
 	prevProvider := otel.GetTracerProvider()
 	prevPropagator := otel.GetTextMapPropagator()
@@ -162,18 +161,18 @@ func TestNewSampler(t *testing.T) {
 	tests := []struct {
 		name     string
 		sampler  string
-		expected trace.SamplingDecision
+		expected sdktrace.SamplingDecision
 	}{
-		{name: "always_on", sampler: "always_on", expected: trace.RecordAndSample},
-		{name: "always_off", sampler: "always_off", expected: trace.Drop},
-		{name: "ratio", sampler: "0.0", expected: trace.Drop},
-		{name: "unknown", sampler: "bogus", expected: trace.Drop},
+		{name: "always_on", sampler: "always_on", expected: sdktrace.RecordAndSample},
+		{name: "always_off", sampler: "always_off", expected: sdktrace.Drop},
+		{name: "ratio", sampler: "0.0", expected: sdktrace.Drop},
+		{name: "unknown", sampler: "bogus", expected: sdktrace.Drop},
 	}
 
 	for _, tt := range tests {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
-			res := newSampler(tt.sampler).ShouldSample(trace.SamplingParameters{
+			res := newSampler(tt.sampler).ShouldSample(sdktrace.SamplingParameters{
 				ParentContext: context.Background(),
 				Name:          "test",
 			})

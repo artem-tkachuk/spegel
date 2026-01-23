@@ -13,9 +13,9 @@ import (
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/resource"
-	"go.opentelemetry.io/otel/sdk/trace"
-	oteltrace "go.opentelemetry.io/otel/trace"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.24.0"
+	"go.opentelemetry.io/otel/trace"
 )
 
 const (
@@ -82,10 +82,10 @@ func Setup(ctx context.Context, cfg Config) (Shutdown, error) {
 		return nil, fmt.Errorf("failed to create resource: %w", err)
 	}
 
-	tp := trace.NewTracerProvider(
-		trace.WithBatcher(exporter),
-		trace.WithResource(res),
-		trace.WithSampler(newSampler(cfg.Sampler)),
+	tp := sdktrace.NewTracerProvider(
+		sdktrace.WithBatcher(exporter),
+		sdktrace.WithResource(res),
+		sdktrace.WithSampler(newSampler(cfg.Sampler)),
 	)
 
 	otel.SetTracerProvider(tp)
@@ -112,7 +112,7 @@ func Setup(ctx context.Context, cfg Config) (Shutdown, error) {
 	return shutdownFn, nil
 }
 
-func isNoopTracerProvider(tp oteltrace.TracerProvider) bool {
+func isNoopTracerProvider(tp trace.TracerProvider) bool {
 	tracer := tp.Tracer("spegel-otel-probe")
 	_, span := tracer.Start(context.Background(), "otel-probe")
 	spanCtx := span.SpanContext()
@@ -147,22 +147,22 @@ func getEnv(key, defaultValue string) string {
 }
 
 // newSampler creates a trace sampler based on the provided string.
-func newSampler(samplerType string) trace.Sampler {
+func newSampler(samplerType string) sdktrace.Sampler {
 	switch samplerType {
 	case "always_on":
-		return trace.AlwaysSample()
+		return sdktrace.AlwaysSample()
 	case "always_off":
-		return trace.NeverSample()
+		return sdktrace.NeverSample()
 	case "parentbased_always_on":
-		return trace.ParentBased(trace.AlwaysSample())
+		return sdktrace.ParentBased(sdktrace.AlwaysSample())
 	case "parentbased_always_off":
-		return trace.ParentBased(trace.NeverSample())
+		return sdktrace.ParentBased(sdktrace.NeverSample())
 	default:
 		// Try to parse as a ratio
 		if ratio, err := strconv.ParseFloat(samplerType, 64); err == nil && ratio >= 0 && ratio <= 1 {
-			return trace.TraceIDRatioBased(ratio)
+			return sdktrace.TraceIDRatioBased(ratio)
 		}
 		// Default to parentbased_always_off
-		return trace.ParentBased(trace.NeverSample())
+		return sdktrace.ParentBased(sdktrace.NeverSample())
 	}
 }
