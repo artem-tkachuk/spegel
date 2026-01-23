@@ -116,6 +116,29 @@ func TestSetup_OverridesExistingProviderWhenConfigured(t *testing.T) {
 	assert.NotSame(t, existing, otel.GetTracerProvider())
 }
 
+//nolint:paralleltest // Mutates global OTEL provider/propagator/env.
+func TestSetup_UsesEnvSampler(t *testing.T) {
+	prevProvider := otel.GetTracerProvider()
+	prevPropagator := otel.GetTextMapPropagator()
+	otel.SetTracerProvider(noop.NewTracerProvider())
+	otel.SetTextMapPropagator(propagation.TraceContext{})
+
+	t.Setenv("OTEL_TRACES_SAMPLER", "always_on")
+	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "localhost:4318")
+	t.Cleanup(func() {
+		otel.SetTracerProvider(prevProvider)
+		otel.SetTextMapPropagator(prevPropagator)
+	})
+
+	shutdown, err := Setup(context.Background(), Config{})
+	require.NoError(t, err)
+	require.NotNil(t, shutdown)
+
+	_, span := otel.Tracer("spegel-test").Start(context.Background(), "probe")
+	assert.True(t, span.IsRecording())
+	span.End()
+}
+
 //nolint:paralleltest // Mutates global OTEL provider/propagator.
 func TestSetup_InsecureEndpoint(t *testing.T) {
 	prevProvider := otel.GetTracerProvider()
