@@ -14,8 +14,14 @@ import (
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/resource"
 	"go.opentelemetry.io/otel/sdk/trace"
+	oteltrace "go.opentelemetry.io/otel/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.24.0"
-	"go.opentelemetry.io/otel/trace/noop"
+)
+
+const (
+	defaultServiceName = "spegel"
+	defaultSampler     = "parentbased_always_off"
+	defaultEndpoint    = "localhost:4318"
 )
 
 // Shutdown is a function type for shutting down the OTEL SDK.
@@ -33,20 +39,24 @@ type Config struct {
 func Setup(ctx context.Context, cfg Config) (Shutdown, error) {
 	log := logr.FromContextOrDiscard(ctx)
 
-	if _, ok := otel.GetTracerProvider().(noop.TracerProvider); !ok {
+	explicitConfig := isExplicitConfig(cfg)
+	if !explicitConfig && !isNoopTracerProvider(otel.GetTracerProvider()) {
 		log.Info("skipping OTEL setup; tracer provider already configured")
 		return nil, nil
+	}
+	if explicitConfig && !isNoopTracerProvider(otel.GetTracerProvider()) {
+		log.Info("overriding existing OTEL tracer provider due to explicit config")
 	}
 
 	// Use cfg if provided, otherwise fall back to environment
 	if cfg.Endpoint == "" {
-		cfg.Endpoint = getEnv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318")
+		cfg.Endpoint = getEnv("OTEL_EXPORTER_OTLP_ENDPOINT", defaultEndpoint)
 	}
 	if cfg.ServiceName == "" {
-		cfg.ServiceName = "spegel"
+		cfg.ServiceName = getEnv("OTEL_SERVICE_NAME", defaultServiceName)
 	}
 	if cfg.Sampler == "" {
-		cfg.Sampler = getEnv("OTEL_TRACES_SAMPLER", "parentbased_always_off")
+		cfg.Sampler = getEnv("OTEL_TRACES_SAMPLER", defaultSampler)
 	}
 
 	log.Info("initializing OTEL", "service", cfg.ServiceName, "endpoint", cfg.Endpoint, "sampler", cfg.Sampler)
@@ -100,6 +110,27 @@ func Setup(ctx context.Context, cfg Config) (Shutdown, error) {
 	}
 
 	return shutdownFn, nil
+}
+
+func isNoopTracerProvider(tp oteltrace.TracerProvider) bool {
+	tracer := tp.Tracer("spegel-otel-probe")
+	_, span := tracer.Start(context.Background(), "otel-probe")
+	spanCtx := span.SpanContext()
+	span.End()
+	return !spanCtx.IsValid()
+}
+
+func isExplicitConfig(cfg Config) bool {
+	if cfg.Endpoint != "" || cfg.Insecure {
+		return true
+	}
+	if cfg.ServiceName != "" && cfg.ServiceName != defaultServiceName {
+		return true
+	}
+	if cfg.Sampler != "" && cfg.Sampler != defaultSampler {
+		return true
+	}
+	return false
 }
 
 // SetupWithDefaults is a convenience function that accepts a service name.

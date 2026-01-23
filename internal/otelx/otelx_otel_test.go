@@ -95,6 +95,28 @@ func TestSetup_RespectsExistingPropagator(t *testing.T) {
 }
 
 //nolint:paralleltest // Mutates global OTEL provider/propagator.
+func TestSetup_OverridesExistingProviderWhenConfigured(t *testing.T) {
+	prevProvider := otel.GetTracerProvider()
+	prevPropagator := otel.GetTextMapPropagator()
+	existing := trace.NewTracerProvider()
+	otel.SetTracerProvider(existing)
+	otel.SetTextMapPropagator(propagation.TraceContext{})
+	t.Cleanup(func() {
+		otel.SetTracerProvider(prevProvider)
+		otel.SetTextMapPropagator(prevPropagator)
+	})
+
+	shutdown, err := Setup(context.Background(), Config{
+		Endpoint: "http://127.0.0.1:4318",
+		Sampler:  "always_on",
+		Insecure: true,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, shutdown)
+	assert.NotSame(t, existing, otel.GetTracerProvider())
+}
+
+//nolint:paralleltest // Mutates global OTEL provider/propagator.
 func TestSetup_InsecureEndpoint(t *testing.T) {
 	prevProvider := otel.GetTracerProvider()
 	prevPropagator := otel.GetTextMapPropagator()
