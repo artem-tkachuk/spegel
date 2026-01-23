@@ -70,7 +70,7 @@ Read the [getting started](https://spegel.dev/docs/getting-started/) guide to de
 | spegel.mirrorResolveTimeout | string | `"20ms"` | Max duration spent finding a mirror. |
 | spegel.mirroredRegistries | list | `[]` | Registries for which mirror configuration will be created. Empty means all registires will be mirrored. |
 | spegel.otel | object | `{"endpoint":"","insecure":false,"sampler":"parentbased_always_off","serviceName":"spegel"}` | OTEL tracing configuration. |
-| spegel.otel.endpoint | string | `""` | OTEL exporter endpoint (e.g., http://otel-collector:4318). |
+| spegel.otel.endpoint | string | `""` | OTEL exporter endpoint (e.g., otel-collector:4318). |
 | spegel.otel.insecure | bool | `false` | Use insecure connection for OTEL exporter. |
 | spegel.otel.sampler | string | `"parentbased_always_off"` | Trace sampler (always_on, always_off, parentbased_always_on, parentbased_always_off, or a ratio 0.0-1.0). |
 | spegel.otel.serviceName | string | `"spegel"` | Service name for OTEL traces. |
