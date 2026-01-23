@@ -26,11 +26,13 @@ import (
 	"helm.sh/helm/v4/pkg/getter"
 	"helm.sh/helm/v4/pkg/kube"
 	"helm.sh/helm/v4/pkg/registry"
+	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/kubernetes"
 	restclient "k8s.io/client-go/rest"
@@ -55,6 +57,8 @@ func TestKubernetes(t *testing.T) {
 	testStrategy := os.Getenv("INTEGRATION_TEST_STRATEGY")
 	require.NotEmpty(t, testStrategy)
 	t.Log("Running tests with with strategy", testStrategy)
+
+	keepCluster := os.Getenv("INTEGRATION_TEST_KEEP_CLUSTER") != ""
 
 	imgRef := os.Getenv("IMG_REF")
 	require.NotEmpty(t, imgRef)
@@ -171,6 +175,10 @@ func TestKubernetes(t *testing.T) {
 			err := provider.Create(kindName, createOpts...)
 			require.NoError(t, err)
 			t.Cleanup(func() {
+				if keepCluster {
+					t.Log("Keeping Kind cluster for debugging")
+					return
+				}
 				if t.Failed() {
 					return
 				}
@@ -195,6 +203,7 @@ func TestKubernetes(t *testing.T) {
 			require.NoError(t, err)
 			k8sClient, err := kubernetes.NewForConfig(k8sCfg)
 			require.NoError(t, err)
+			ensureJaeger(t, k8sClient)
 
 			t.Log("Loading Spegel image into nodes")
 			f, err := os.Open(imgPath)
@@ -346,7 +355,10 @@ func TestKubernetes(t *testing.T) {
 			noSpegelRestart(t, k8sClient)
 
 			t.Log("Restarting Containerd")
-			podList, err := k8sClient.CoreV1().Pods(spegelNamespace).List(t.Context(), metav1.ListOptions{FieldSelector: "spec.nodeName=" + kindNodes[0].String()})
+			podList, err := k8sClient.CoreV1().Pods(spegelNamespace).List(t.Context(), metav1.ListOptions{
+				FieldSelector: "spec.nodeName=" + kindNodes[0].String(),
+				LabelSelector: "app.kubernetes.io/component=spegel",
+			})
 			require.NoError(t, err)
 			require.Len(t, podList.Items, 1)
 			err = kindNodes[0].CommandContext(t.Context(), "systemctl", "restart", "containerd").Run()
@@ -364,9 +376,13 @@ func TestKubernetes(t *testing.T) {
 			node.ObjectMeta.Labels[nodeTaintKey] = "false"
 			_, err = k8sClient.CoreV1().Nodes().Update(t.Context(), node, metav1.UpdateOptions{})
 			require.NoError(t, err)
-			podList, err = k8sClient.CoreV1().Pods(spegelNamespace).List(t.Context(), metav1.ListOptions{})
+			podList, err = k8sClient.CoreV1().Pods(spegelNamespace).List(t.Context(), metav1.ListOptions{
+				LabelSelector: "app.kubernetes.io/component=spegel",
+			})
 			require.NoError(t, err)
-			err = k8sClient.CoreV1().Pods(spegelNamespace).DeleteCollection(t.Context(), metav1.DeleteOptions{}, metav1.ListOptions{})
+			err = k8sClient.CoreV1().Pods(spegelNamespace).DeleteCollection(t.Context(), metav1.DeleteOptions{}, metav1.ListOptions{
+				LabelSelector: "app.kubernetes.io/component=spegel",
+			})
 			require.NoError(t, err)
 			require.EventuallyWithT(t, func(c *assert.CollectT) {
 				for _, pod := range podList.Items {
@@ -376,7 +392,9 @@ func TestKubernetes(t *testing.T) {
 			}, 5*time.Second, 1*time.Second)
 
 			for range 5 {
-				podList, err = k8sClient.CoreV1().Pods(spegelNamespace).List(t.Context(), metav1.ListOptions{})
+				podList, err = k8sClient.CoreV1().Pods(spegelNamespace).List(t.Context(), metav1.ListOptions{
+					LabelSelector: "app.kubernetes.io/component=spegel",
+				})
 				require.NoError(t, err)
 				require.Len(t, podList.Items, 1)
 				u, err := patch.ToUnstructured(&podList.Items[0])
@@ -389,6 +407,10 @@ func TestKubernetes(t *testing.T) {
 			}
 			noSpegelRestart(t, k8sClient)
 
+			if keepCluster {
+				t.Log("Keeping Spegel install for debugging")
+				return
+			}
 			uninstallSpegel(t, actionCfg, kindNodes)
 		})
 	}
@@ -428,6 +450,11 @@ func installSpegel(t *testing.T, actionCfg *action.Configuration, k8sClient kube
 	vals := map[string]any{
 		"spegel": map[string]any{
 			"logLevel": "DEBUG",
+			"otel": map[string]any{
+				"endpoint": "jaeger-collector.spegel.svc:4318",
+				"insecure": true,
+				"sampler":  "always_on",
+			},
 		},
 		"nodeSelector": map[string]any{
 			nodeTaintKey: "true",
@@ -467,7 +494,9 @@ func installSpegel(t *testing.T, actionCfg *action.Configuration, k8sClient kube
 		require.NoError(c, err)
 		require.Equal(c, status.CurrentStatus, res.Status)
 	}, 10*time.Second, 1*time.Second)
-	podList, err := k8sClient.CoreV1().Pods(spegelNamespace).List(t.Context(), metav1.ListOptions{})
+	podList, err := k8sClient.CoreV1().Pods(spegelNamespace).List(t.Context(), metav1.ListOptions{
+		LabelSelector: "app.kubernetes.io/component=spegel",
+	})
 	require.NoError(t, err)
 	require.Equal(t, len(kindNodes), len(podList.Items))
 }
@@ -488,6 +517,87 @@ func uninstallSpegel(t *testing.T, actionCfg *action.Configuration, kindNodes []
 		err = node.CommandContext(t.Context(), "ls", "/etc/containerd/certs.d").SetStdout(buf).Run()
 		require.NoError(t, err)
 		require.Empty(t, buf.String())
+	}
+}
+
+func ensureJaeger(t *testing.T, k8sClient kubernetes.Interface) {
+	t.Helper()
+
+	ensureNamespace(t, k8sClient, spegelNamespace)
+
+	labels := map[string]string{"app": "jaeger"}
+	deploy := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "jaeger-collector",
+			Namespace: spegelNamespace,
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: ptr.To[int32](1),
+			Selector: &metav1.LabelSelector{MatchLabels: labels},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{Labels: labels},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name:  "jaeger",
+							Image: "jaegertracing/all-in-one:latest",
+							Ports: []corev1.ContainerPort{
+								{Name: "otlp-http", ContainerPort: 4318, Protocol: corev1.ProtocolTCP},
+								{Name: "ui", ContainerPort: 16686, Protocol: corev1.ProtocolTCP},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	_, err := k8sClient.AppsV1().Deployments(spegelNamespace).Create(t.Context(), deploy, metav1.CreateOptions{})
+	if err != nil && !kerrors.IsAlreadyExists(err) {
+		require.NoError(t, err)
+	}
+
+	svc := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "jaeger-collector",
+			Namespace: spegelNamespace,
+		},
+		Spec: corev1.ServiceSpec{
+			Selector: labels,
+			Ports: []corev1.ServicePort{
+				{
+					Name:       "otlp-http",
+					Port:       4318,
+					TargetPort: intstr.FromInt(4318),
+					Protocol:   corev1.ProtocolTCP,
+				},
+				{
+					Name:       "ui",
+					Port:       16686,
+					TargetPort: intstr.FromInt(16686),
+					Protocol:   corev1.ProtocolTCP,
+				},
+			},
+		},
+	}
+	_, err = k8sClient.CoreV1().Services(spegelNamespace).Create(t.Context(), svc, metav1.CreateOptions{})
+	if err != nil && !kerrors.IsAlreadyExists(err) {
+		require.NoError(t, err)
+	}
+
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		deploy, err := k8sClient.AppsV1().Deployments(spegelNamespace).Get(t.Context(), "jaeger-collector", metav1.GetOptions{})
+		require.NoError(c, err)
+		require.GreaterOrEqual(c, deploy.Status.ReadyReplicas, int32(1))
+	}, 30*time.Second, 1*time.Second)
+}
+
+func ensureNamespace(t *testing.T, k8sClient kubernetes.Interface, name string) {
+	t.Helper()
+	_, err := k8sClient.CoreV1().Namespaces().Create(t.Context(), &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{Name: name},
+	}, metav1.CreateOptions{})
+	if err != nil && !kerrors.IsAlreadyExists(err) {
+		require.NoError(t, err)
 	}
 }
 
