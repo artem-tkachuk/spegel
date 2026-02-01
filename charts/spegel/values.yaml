@@ -157,6 +157,15 @@ basicAuthSecretName: ""
 spegel:
   # -- Minimum log level to output. Value should be DEBUG, INFO, WARN, or ERROR.
   logLevel: "INFO"
+  dataDir:
+    # -- Enable persisted data directory for libp2p key.
+    enabled: false
+    # -- Path in the container where data is stored.
+    path: "/var/lib/spegel"
+    # -- Host path mounted into the pod for persistence.
+    hostPath: "/var/lib/spegel"
+    # -- HostPath type for the data directory.
+    hostPathType: DirectoryOrCreate
   # -- Registries for which mirror configuration will be created. Empty means all registires will be mirrored.
   mirroredRegistries: []
     # - https://docker.io

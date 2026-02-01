@@ -59,6 +59,10 @@ Read the [getting started](https://spegel.dev/docs/getting-started/) guide to de
 | serviceMonitor.relabelings | list | `[]` | List of relabeling rules to apply the target’s metadata labels. |
 | serviceMonitor.scrapeTimeout | string | `"30s"` | Prometheus scrape interval timeout. |
 | spegel.additionalMirrorTargets | list | `[]` | Additional target mirror registries other than Spegel. |
+| spegel.dataDir.enabled | bool | `false` | Enable persisted data directory for libp2p key. |
+| spegel.dataDir.hostPath | string | `"/var/lib/spegel"` | Host path mounted into the pod for persistence. |
+| spegel.dataDir.hostPathType | string | `"DirectoryOrCreate"` | HostPath type for the data directory. |
+| spegel.dataDir.path | string | `"/var/lib/spegel"` | Path in the container where data is stored. |
 | spegel.containerdContentPath | string | `"/var/lib/containerd/io.containerd.content.v1.content"` | Path to Containerd content store.. |
 | spegel.containerdMirrorAdd | bool | `true` | If true Spegel will add mirror configuration to the node. |
 | spegel.containerdNamespace | string | `"k8s.io"` | Containerd namespace where images are stored. |
